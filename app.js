@@ -14,6 +14,8 @@ const scopes = [
     'https://www.googleapis.com/auth/drive.photos.readonly',
 ];
 
+
+
 const app = express();
 
 const oauth2Client = new google.auth.OAuth2(
@@ -24,13 +26,16 @@ const oauth2Client = new google.auth.OAuth2(
 google.options({ auth: oauth2Client });
 
 app.get('/', (req, res, next) => {
-    res.send('Hello World!');
+    res.json({ mesage: 'Hello World!' });//testing purposes
     next();
 });
-
+//creating path for upload 
 const filePath = path.join(__dirname, 'image.png');
 
 app.get('/upload', async (req, res, next) => {
+    /*
+    I have retrieved the tokens from the database as i thought that the refresh token would change for every refresh as it was the case for twitter Oauth but you can store as an environment variable as well and is valid for 100 refreshes or 6 months but no limits for service account
+    */ 
     const test = await Tokens.findOne({ user: 'Admin' }).then(user => {
         oauth2Client.setCredentials({
             refresh_token: user.refresh_token,
@@ -38,16 +43,21 @@ app.get('/upload', async (req, res, next) => {
     }).catch(err => {
         console.log(err);
     })
+
+    //Creating a drive object
     const drive = google.drive({ version: 'v3', auth: oauth2Client });
     console.log("drive succesfully created")
+    //File data we want to upload
     const fileMetadata = {
         name: 'photo.png',
         mimeType: 'image/png'
     };
+    //media data
     const media = {
         mimeType: 'image/png',
         body: fs.createReadStream(filePath)
     };
+    //creating a file in drive
     const response = drive.files.create({
         resource: fileMetadata,
         media: media,
@@ -57,7 +67,6 @@ app.get('/upload', async (req, res, next) => {
             // Handle error
             console.error(err);
         } else {
-
             console.log('File Id: ', file.data.id);
             console.log(file);
             console.log(file.data);
@@ -65,6 +74,7 @@ app.get('/upload', async (req, res, next) => {
     });
 });
 
+//generating a public url for the file uploaded
 app.get('/generateurl', async (req, res, next) => {
     try {
         const fileId = '1jo7z1cCmAQH7sH8Kg3bOI6Za2ZRKTXsK';
@@ -76,6 +86,7 @@ app.get('/generateurl', async (req, res, next) => {
         }).catch(err => {
             console.log(err);
         })
+        console.log(oauth2Client);
         //change file permision
         await drive.permissions.create({
             fileId: fileId,
@@ -91,14 +102,18 @@ app.get('/generateurl', async (req, res, next) => {
             fields: 'webViewLink, webContentLink',
         });
         console.log(result.data);
-        res.json({result:result.data});
+        res.json({ result: result.data });
     } catch (error) {
         console.log("error");
         console.log(error.message);
-        res.json({error:error.message})
+        res.json({ error: error.message })
     }
 });
 
+/* 
+With this endpoint you will get a url to login for oauth and will be redirected to callback 
+which will store tokens in the database
+*/
 app.get('/login', (req, res, next) => {
     const authorizeUrl = oauth2Client.generateAuthUrl({
         access_type: 'offline',
@@ -113,12 +128,9 @@ app.get('/login', (req, res, next) => {
 
 app.use('/oauth2callback', async (req, res, next) => {
     const code = req.query.code;
-    const r = await oauth2Client.getToken(code);
-    console.log(r);
-    console.log(r.tokens);
-    console.log("code :" + code);
+    const r = await oauth2Client.getToken(code);//Will return tokens json 
     const tokens = new Tokens({
-        user: 'Admin',
+        user: 'chinujod',
         access_token: r.tokens.access_token,
         refresh_token: r.tokens.refresh_token,
         code: code
